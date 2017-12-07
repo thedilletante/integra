@@ -1,2 +1,2 @@
-# integra
+# Integra
 P2P messenger
