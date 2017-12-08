@@ -1,4 +1,7 @@
 #include <iostream>
+#include <string>
+#include <vector>
+#include <regex>
 
 #include <asio.hpp>
 
@@ -87,7 +90,13 @@ auto udp_server(uint16_t port, size_t max_packet_length) {
 }
 
 int main(int argc, char* argv[]) {
-    const uint16_t port = 7777;
+
+    if (argc < 2) {
+        std::cout << "Usage: " << argv[0] << " <port>" << std::endl;
+        return 0;
+    }
+
+    const uint16_t port = std::atoi(argv[1]);
     const size_t max_packet_length = 1024;
 
     asio::io_service service;
@@ -95,16 +104,49 @@ int main(int argc, char* argv[]) {
     auto subscription = integra::udp_server(port, max_packet_length)
         .subscribe_on(rxcpp::observe_on_new_thread())
         .subscribe([&service, &socket](integra::udp_packet msg){
-            std::cout << " Received from: "
+            std::cout << "Received from: "
                       << msg.sender.address().to_string()
                       << ":" << msg.sender.port()
                       << ", message: "
                       << std::string(msg.data.begin(), msg.data.end())
                       << std::endl;
-            socket.send_to(asio::buffer(msg.data), msg.sender);
         });
 
-    while (getchar() != 'q');
+    for (std::string line; std::getline(std::cin, line);) {
+        if ("quit" == line) {
+            break;
+        } else {
+            static const std::regex send_regex("send *([^ ]*) *([^ ]*) *(.*)");
+            std::string address;
+            std::string port;
+            std::string message;
+
+            using regex_iterator = std::regex_token_iterator<std::string::iterator>;
+            auto counter = 0;
+            for (regex_iterator it { std::begin(line), std::end(line), send_regex, {1, 2, 3} }, end;
+                 it != end; ++it, ++counter) {
+                switch (counter) {
+                    case 0: address = *it; break;
+                    case 1: port = *it; break;
+                    case 2: message = *it; break;
+                    default: break;
+                }
+            }
+
+            if (address.empty() || port.empty()) {
+                std::cout << "invalid command format" << std::endl;
+                continue;
+            }
+
+            udp::endpoint endpoint(asio::ip::address::from_string(address), std::stoi(port));
+            std::cout << "Sending to "
+                      << endpoint.address().to_string()
+                      << ":" << endpoint.port()
+                      << " message: " << message
+                      << std::endl;
+            socket.send_to(asio::buffer(message), endpoint);
+        }
+    }
 
     subscription.unsubscribe();
 
