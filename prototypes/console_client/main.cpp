@@ -84,7 +84,6 @@ int main(int argc, char* argv[]) {
 
     auto subscription = integra::udp_server(port, max_packet_length)
         .subscribe_on(rxcpp::observe_on_new_thread())
-        .observe_on(rxcpp::observe_on_new_thread())
         .subscribe([](integra::udp_packet msg){
             std::cout << " Received from: "
                       << msg.sender.address().to_string()
