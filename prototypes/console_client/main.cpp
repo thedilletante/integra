@@ -10,14 +10,12 @@
 using asio::ip::udp;
 
 /*
- * Simple implementation of udp echo server
+ * Simple implementation of udp server
  *
- * Run ./console_client
- * Type 'q' to quit
- * For send the message to the server: echo -n "message" > /dev/udp/localhost/7777
- * Or to start interractive session: nc 127.0.0.1 7777 -u
- *    server will print incoming messages
- *    so you can grab the port from the log and start listening udp to see echoing: nc 127.0.0.1 <port> -ul
+ * Run ./console_client <port_number>
+ * Supported commands:
+ * `quit` - to quit
+ * `send <ip> <port> <message>` - to send the message
  */
 
 namespace integra {
