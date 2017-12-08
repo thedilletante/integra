@@ -14,75 +14,88 @@ using asio::ip::udp;
  * For send the message to the server: echo -n "message" > /dev/udp/localhost/7777
  */
 
-int main(int argc, char* argv[]) {
+namespace integra {
 
-    struct message {
-        std::vector<uint8_t> data;
-        udp::endpoint sender;
-    };
+struct udp_packet {
+    std::vector<uint8_t> data;
+    udp::endpoint sender;
+};
 
-    auto server = rxcpp::observable<>::create<message>(
-        [](rxcpp::subscriber<message> subscriber){
-            constexpr const static size_t max_length = 1024;
-            uint8_t data[max_length] = {0};
+auto udp_server(uint16_t port, size_t max_packet_length) {
+    return rxcpp::observable<>::create<udp_packet>(
+        [port, max_packet_length] (rxcpp::subscriber<udp_packet> subscriber) {
+            // setup the environment
+            std::vector<uint8_t> data(max_packet_length);
             asio::io_service service;
-            udp::socket socket(service, udp::endpoint(udp::v4(), 7777));
+            udp::socket socket(service, udp::endpoint(udp::v4(), port));
             udp::endpoint sender_endpoint;
 
-            std::function<void()> do_receive;
-            do_receive = [&](){
-                socket.async_receive_from(asio::buffer(data, max_length), sender_endpoint,
-                    [&](std::error_code ec, std::size_t bytes_recvd) {
-                        if (!subscriber.is_subscribed()) {
-                            return;
-                        } else if (!ec && bytes_recvd > 0) {
-                            const message msg { std::vector<uint8_t>(data, data + bytes_recvd), sender_endpoint };
-                            subscriber.on_next(msg);
+            // stop asio service on unsubscribe
+            subscriber.add(rxcpp::make_subscription([&service](){ service.stop(); }));
+
+            // setup on receive data callback
+            using recursive_receive_function = std::function<void()>;
+            const auto do_receive =
+                [&socket, &data, &sender_endpoint, &subscriber] (const recursive_receive_function& recurse) {
+                    socket.async_receive_from(
+                        asio::buffer(data.data(), data.size()),
+                        sender_endpoint,
+                        [&subscriber, &data, &sender_endpoint, &recurse] (std::error_code ec, std::size_t bytes_recvd) {
+                            if (!subscriber.is_subscribed()) {
+                                return;
+                            } else if (!ec && bytes_recvd > 0) {
+                                subscriber.on_next(udp_packet{
+                                    std::vector<uint8_t>(data.begin(), data.begin() + bytes_recvd),
+                                    sender_endpoint
+                                });
+                            }
+                            recurse();
                         }
-                        do_receive();
-                    }
-                );
+                    );
+                };
+            recursive_receive_function recursive_do_receive;
+            recursive_do_receive = [&do_receive, &recursive_do_receive] () {
+                do_receive(recursive_do_receive);
             };
-            do_receive();
 
-            subscriber.add(rxcpp::make_subscription([&service](){
-                service.stop();
-                std::cout << std::this_thread::get_id() << " Unsubscibed, stop" << std::endl;
-            }));
+            // put the first operation into the service
+            recursive_do_receive();
 
+            // run the service
             try {
-                std::cout << std::this_thread::get_id() << " Start the service" << std::endl;
                 service.run();
                 if (subscriber.is_subscribed()) {
                     subscriber.on_completed();
                 }
-                std::cout << std::this_thread::get_id() << " Stop the service" << std::endl;
             } catch (std::exception& e) {
-                std::cout << std::this_thread::get_id() << " Exception: " << e.what() << std::endl;
                 if (subscriber.is_subscribed()) {
                     subscriber.on_error(std::make_exception_ptr(e));
                 }
             }
         }
     );
+}
 
-    auto subscription = server
+}
+
+int main(int argc, char* argv[]) {
+    const uint16_t port = 7777;
+    const size_t max_packet_length = 1024;
+
+    auto subscription = integra::udp_server(port, max_packet_length)
         .subscribe_on(rxcpp::observe_on_new_thread())
-        .subscribe([](message msg){
-            std::cout << std::this_thread::get_id()
-                      << " Received from: "
+        .observe_on(rxcpp::observe_on_new_thread())
+        .subscribe([](integra::udp_packet msg){
+            std::cout << " Received from: "
                       << msg.sender.address().to_string()
+                      << ":" << msg.sender.port()
                       << ", message: "
                       << std::string(msg.data.begin(), msg.data.end())
                       << std::endl;
         });
 
-
-    std::cout << std::this_thread::get_id() << " Enter loop" << std::endl;
-
     while (getchar() != 'q');
 
-    std::cout << std::this_thread::get_id() << " Gracefull shutdown" << std::endl;
     subscription.unsubscribe();
 
     return 0;
