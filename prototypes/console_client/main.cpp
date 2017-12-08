@@ -7,11 +7,14 @@
 using asio::ip::udp;
 
 /*
- * Simple implementation of udp server
+ * Simple implementation of udp echo server
  *
  * Run ./console_client
  * Type 'q' to quit
  * For send the message to the server: echo -n "message" > /dev/udp/localhost/7777
+ * Or to start interractive session: nc 127.0.0.1 7777 -u
+ *    server will print incoming messages
+ *    so you can grab the port from the log and start listening udp to see echoing: nc 127.0.0.1 <port> -ul
  */
 
 namespace integra {
@@ -27,7 +30,12 @@ auto udp_server(uint16_t port, size_t max_packet_length) {
             // setup the environment
             std::vector<uint8_t> data(max_packet_length);
             asio::io_service service;
-            udp::socket socket(service, udp::endpoint(udp::v4(), port));
+            const auto proto = udp::v4();
+            udp::socket socket(service, proto);
+            asio::socket_base::reuse_address reuse_address(true);
+            socket.set_option(reuse_address);
+            socket.bind(udp::endpoint(proto, port));
+
             udp::endpoint sender_endpoint;
 
             // stop asio service on unsubscribe
@@ -82,15 +90,18 @@ int main(int argc, char* argv[]) {
     const uint16_t port = 7777;
     const size_t max_packet_length = 1024;
 
+    asio::io_service service;
+    udp::socket socket(service, udp::v4());
     auto subscription = integra::udp_server(port, max_packet_length)
         .subscribe_on(rxcpp::observe_on_new_thread())
-        .subscribe([](integra::udp_packet msg){
+        .subscribe([&service, &socket](integra::udp_packet msg){
             std::cout << " Received from: "
                       << msg.sender.address().to_string()
                       << ":" << msg.sender.port()
                       << ", message: "
                       << std::string(msg.data.begin(), msg.data.end())
                       << std::endl;
+            socket.send_to(asio::buffer(msg.data), msg.sender);
         });
 
     while (getchar() != 'q');
