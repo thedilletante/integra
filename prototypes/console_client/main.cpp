@@ -105,12 +105,71 @@ int main(int argc, char* argv[]) {
     auto subscription = integra::udp_server(port, max_packet_length, socket_promise)
         .subscribe_on(rxcpp::observe_on_new_thread())
         .subscribe([](integra::udp_packet msg){
-            std::cout << "Received from: "
-                      << msg.sender.address().to_string()
-                      << ":" << msg.sender.port()
-                      << ", message: "
-                      << std::string(msg.data.begin(), msg.data.end())
-                      << std::endl;
+
+            stun::message message { msg.data.begin(), msg.data.end() };
+
+            // Check if this is a STUN message
+            if (message.verify() && message.type() == stun::message::binding_response) {
+                std::cout << "Received from: "
+                          << msg.sender.address().to_string()
+                          << ":" << msg.sender.port()
+                          << ", stun response: " << std::endl;
+
+                // Iterate over the message attributes
+                using namespace stun::attribute;
+                for (stun::message::iterator i = message.begin(), ie = message.end(); i != ie; i++) {
+                    // First, check the attribute type
+                    switch (i->type()) {
+                    case type::software:
+                        std::cout << " software: " << i->to<type::software>().to_string() << std::endl;
+                        break;
+                    case type::username:
+                        std::cout << " username: " << i->to<type::username>().to_string() << std::endl;
+                        break;
+                    case type::mapped_address: {
+                        sockaddr_storage address;
+                        socklen_t client_len = sizeof(sockaddr_storage);
+                        if (i->to<type::mapped_address>().to_sockaddr((sockaddr*)&address)) {
+                            char hoststr[NI_MAXHOST];
+                            char portstr[NI_MAXSERV];
+
+                            if (0 == getnameinfo((struct sockaddr *)&address,
+                                                 client_len, hoststr, sizeof(hoststr), portstr, sizeof(portstr),
+                                                 NI_NUMERICHOST | NI_NUMERICSERV)) {
+                                std::cout << " mapped: " << hoststr << ":" << portstr << std::endl;
+                            }
+                        }
+                        break;
+                    }
+                    case type::xor_mapped_address: {
+                        sockaddr_storage address;
+                        socklen_t client_len = sizeof(sockaddr_storage);
+                        if (i->to<type::xor_mapped_address>().to_sockaddr((sockaddr*)&address)) {
+                            char hoststr[NI_MAXHOST];
+                            char portstr[NI_MAXSERV];
+
+                            if (0 == getnameinfo((struct sockaddr *)&address,
+                                                 client_len, hoststr, sizeof(hoststr), portstr, sizeof(portstr),
+                                                 NI_NUMERICHOST | NI_NUMERICSERV)) {
+                                std::cout << " xor_mapped: " << hoststr << ":" << portstr << std::endl;
+                            }
+                        }
+                        break;
+                    }
+                    default:
+                        std::cout << " some more attribute" << std::endl;
+                    }
+                }
+            } else {
+                std::cout << "Received from: "
+                          << msg.sender.address().to_string()
+                          << ":" << msg.sender.port()
+                          << ", message: "
+                          << std::string(msg.data.begin(), msg.data.end())
+                          << std::endl;
+            }
+
+
         });
 
 
