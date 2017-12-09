@@ -19,7 +19,34 @@ target_include_directories(${PROJECT_NAME}
     ${LIBS_DIR}/RxCpp/Rx/v2/src
 )
 
+
+# stun-library
+set(STUN_DIR ${LIBS_DIR}/stun-msg)
+
+add_library(stunmsg
+  ${STUN_DIR}/src/crc32.c
+  ${STUN_DIR}/src/crc32.h
+  ${STUN_DIR}/src/hmac_sha1.c
+  ${STUN_DIR}/src/hmac_sha1.h
+  ${STUN_DIR}/src/sha1.c
+  ${STUN_DIR}/src/sha1.h
+  ${STUN_DIR}/src/md5.c
+  ${STUN_DIR}/src/md5.h
+  ${STUN_DIR}/src/stun_msg.c
+  ${STUN_DIR}/include/stun/msg.h
+)
+
+target_include_directories(stunmsg
+  PUBLIC
+  ${STUN_DIR}/include
+  )
+
 target_compile_definitions(${PROJECT_NAME}
   PRIVATE
     ASIO_STANDALONE
+)
+
+target_link_libraries(${PROJECT_NAME}
+  PRIVATE
+    stunmsg
 )

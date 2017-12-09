@@ -6,3 +6,6 @@
 	path = libs/RxCpp
 	url = https://github.com/Reactive-Extensions/RxCpp.git
     ignore = dirty
+[submodule "libs/stun-msg"]
+	path = libs/stun-msg
+	url = https://github.com/balena/stun-msg.git
