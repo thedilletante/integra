@@ -9,3 +9,4 @@
 [submodule "libs/stun-msg"]
 	path = libs/stun-msg
 	url = https://github.com/balena/stun-msg.git
+    ignore = dirty

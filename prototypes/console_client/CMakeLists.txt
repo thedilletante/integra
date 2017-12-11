@@ -50,3 +50,15 @@ target_link_libraries(${PROJECT_NAME}
   PRIVATE
     stunmsg
 )
+
+target_compile_options(stunmsg
+  PRIVATE
+    -Wall
+    -pedantic
+)
+
+target_compile_options(${PROJECT_NAME}
+  PRIVATE
+    -Wall
+    -pedantic
+)

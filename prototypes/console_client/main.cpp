@@ -178,74 +178,38 @@ int main(int argc, char* argv[]) {
         if ("quit" == line) {
             break;
         } else if (line.find("send ") == 0) {
-            static const std::regex send_regex("send *([^ ]*) *([^ ]*) *(.*)");
-            std::string address;
-            std::string port;
-            std::string message;
+            static const std::regex send_regex(R"s(send +([^ ]+) +(\d+) +(.*)%)s");
+            std::smatch match;
 
-            using regex_iterator = std::regex_token_iterator<std::string::iterator>;
-            auto counter = 0;
-            for (regex_iterator it { std::begin(line), std::end(line), send_regex, {1, 2, 3} }, end;
-                 it != end; ++it, ++counter) {
-                switch (counter) {
-                    case 0: address = *it; break;
-                    case 1: port = *it; break;
-                    case 2: message = *it; break;
-                    default: break;
-                }
+            if (std::regex_search(line, match, send_regex)) {
+                const auto address = match[1].str();
+                const auto port = std::stoi(match[2].str());
+                const auto message = match[3].str();
+
+                udp::endpoint endpoint(asio::ip::address::from_string(address), port);
+                std::cout << "Sending to "
+                          << endpoint.address().to_string()
+                          << ":" << endpoint.port()
+                          << " message: " << message
+                          << std::endl;
+                socket->send_to(asio::buffer(message), endpoint);
             }
-
-            if (address.empty() || port.empty()) {
-                std::cout << "invalid command format" << std::endl;
-                continue;
-            }
-
-            udp::endpoint endpoint(asio::ip::address::from_string(address), std::stoi(port));
-            std::cout << "Sending to "
-                      << endpoint.address().to_string()
-                      << ":" << endpoint.port()
-                      << " message: " << message
-                      << std::endl;
-            socket->send_to(asio::buffer(message), endpoint);
         } else if (line.find("stun ") == 0) {
-            static const std::regex send_regex("stun *([^ ]*) *([^ ]*)$");
-            std::string address;
-            std::string port;
+            static const std::regex stun_regex(R"s(stun +([^ ]+) +(\\d+)$)s");
+            std::smatch match;
 
-            using regex_iterator = std::regex_token_iterator<std::string::iterator>;
-            auto counter = 0;
-            for (regex_iterator it { std::begin(line), std::end(line), send_regex, {1, 2} }, end;
-                 it != end; ++it, ++counter) {
-                switch (counter) {
-                    case 0: address = *it; break;
-                    case 1: port = *it; break;
-                    default: break;
-                }
+            if (std::regex_search(line, match, stun_regex)) {
+                const auto address = match[1].str();
+                const auto port = std::stoi(match[2].str());
+
+                udp::endpoint endpoint(asio::ip::address::from_string(address), port);
+                uint8_t tsx_id[12] = {0};
+                stun::message msg {stun::message::binding_request, tsx_id};
+                msg << stun::attribute::software("integra");
+                msg << stun::attribute::fingerprint();
+                socket->send_to(asio::buffer(msg.data(), msg.size()), endpoint);
             }
 
-            if (address.empty() || port.empty()) {
-                std::cout << "invalid command format" << std::endl;
-                continue;
-            }
-
-            udp::endpoint endpoint(asio::ip::address::from_string(address), std::stoi(port));
-            uint8_t tsx_id[12] = {0};
-            stun::message msg {stun::message::binding_request, tsx_id};
-
-            // Add a SOFTWARE attribute
-            msg << stun::attribute::software("integra");
-
-            // Add a PRIORITY attribute
-            msg << stun::attribute::priority(0x6e0001fful);
-
-            // Add a ICE-CONTROLLED attribute
-            msg << stun::attribute::ice_controlled(0x932ff9b151263b36ull);
-
-            // Appends a FINGERPRINT attribute as last attribute
-            msg << stun::attribute::fingerprint();
-
-            // Now, send the message
-            socket->send_to(asio::buffer(msg.data(), msg.size()), endpoint);
         } else {
             std::cout << "unsupported command" << std::endl;
         }
