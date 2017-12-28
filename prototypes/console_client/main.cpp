@@ -94,8 +94,8 @@ auto udp_server(uint16_t port, size_t max_packet_length, std::promise<udp::socke
 
 int main(int argc, char* argv[]) {
 
-    if (argc < 2) {
-        std::cout << "Usage: " << argv[0] << " <port>" << std::endl;
+    if (argc < 3) {
+        std::cout << "Usage: " << argv[0] << " <port> <peer_port>" << std::endl;
         return 0;
     }
 
@@ -145,8 +145,10 @@ int main(int argc, char* argv[]) {
                         sockaddr_storage address;
                         socklen_t client_len = sizeof(sockaddr_storage);
                         if (i->to<type::xor_mapped_address>().to_sockaddr((sockaddr*)&address)) {
+
                             char hoststr[NI_MAXHOST];
                             char portstr[NI_MAXSERV];
+
 
                             if (0 == getnameinfo((struct sockaddr *)&address,
                                                  client_len, hoststr, sizeof(hoststr), portstr, sizeof(portstr),
@@ -178,7 +180,7 @@ int main(int argc, char* argv[]) {
         if ("quit" == line) {
             break;
         } else if (line.find("send ") == 0) {
-            static const std::regex send_regex(R"s(send +([^ ]+) +(\d+) +(.*)%)s");
+            static const std::regex send_regex(R"s(send +([^ ]+) +(\d+) +(.*))s");
             std::smatch match;
 
             if (std::regex_search(line, match, send_regex)) {
@@ -193,9 +195,11 @@ int main(int argc, char* argv[]) {
                           << " message: " << message
                           << std::endl;
                 socket->send_to(asio::buffer(message), endpoint);
+            } else {
+                std::cout << "Invalid send command" << std::endl;
             }
         } else if (line.find("stun ") == 0) {
-            static const std::regex stun_regex(R"s(stun +([^ ]+) +(\\d+)$)s");
+            static const std::regex stun_regex(R"s(stun +([^ ]+) +(\d+)$)s");
             std::smatch match;
 
             if (std::regex_search(line, match, stun_regex)) {
@@ -204,12 +208,31 @@ int main(int argc, char* argv[]) {
 
                 udp::endpoint endpoint(asio::ip::address::from_string(address), port);
                 uint8_t tsx_id[12] = {0};
-                stun::message msg {stun::message::binding_request, tsx_id};
+                stun::message msg{stun::message::binding_request, tsx_id};
                 msg << stun::attribute::software("integra");
                 msg << stun::attribute::fingerprint();
                 socket->send_to(asio::buffer(msg.data(), msg.size()), endpoint);
+            } else {
+                std::cout << "Invalid stun command" << std::endl;
             }
+        } else if (line.find("initiate ") == 0) {
+            static const std::regex initiate_regex(R"s(initiate +([^ ]+) +(\d+)$)s");
+            std::smatch match;
 
+            if (std::regex_search(line, match, initiate_regex)) {
+                const auto address = match[1].str();
+                const auto port = std::stoi(match[2].str());
+
+                udp::endpoint endpoint(asio::ip::address::from_string(address), port);
+                const std::string message = "hello";
+                for (int i = 0; i < 50; ++i) {
+                    socket->send_to(asio::buffer(message), endpoint);
+                    std::cout << "Sent " << i << " packet" << std::endl;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                }
+            } else {
+                std::cout << "Invalid initiate command" << std::endl;
+            }
         } else {
             std::cout << "unsupported command" << std::endl;
         }
